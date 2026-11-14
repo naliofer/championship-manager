@@ -8,3 +8,7 @@ keystore.properties
 *.keystore
 *.p12
 .android/
+.local-android/
+.local-gradle/
+.local-pwa-dist/
+web/.i18n-write-probe

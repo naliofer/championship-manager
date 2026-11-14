@@ -5,6 +5,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import com.campeonato.duplas.ui.components.*
+import androidx.compose.ui.res.stringResource
+import com.campeonato.duplas.R
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.campeonato.duplas.data.*
@@ -15,10 +18,11 @@ import kotlinx.coroutines.delay
 
 @Composable
 private fun CedhField(label: String, value: String, enabled: Boolean = true, change: (String) -> Unit) {
-    OutlinedTextField(value,change,label={Text(label)},enabled=enabled,modifier=Modifier.fillMaxWidth())
+    OutlinedTextField(value,change,label={Text(label)},enabled=enabled,modifier=Modifier.fillMaxWidth(), colors = championshipFieldColors())
 }
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun CedhApp(repository: CedhRepository) {
+fun CedhApp(repository: CedhRepository, onBack: () -> Unit = {}, onSettings: () -> Unit = {}) {
     val loaded=remember { runCatching { repository.load() } }
     if(loaded.isFailure) { Text("Dados preservados. Falha ao abrir: ${loaded.exceptionOrNull()?.message}"); return }
     var s by remember { mutableStateOf(loaded.getOrThrow()) }
@@ -32,9 +36,13 @@ fun CedhApp(repository: CedhRepository) {
     LaunchedEffect(Unit) { while(true) { now=System.currentTimeMillis(); delay(1000) } }
     fun save(next: CedhState) { try { repository.save(next); s=next; error=null } catch(e: Exception) { error=e.message } }
     val locked=s.tables.isNotEmpty()
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-        Text(s.name,style=MaterialTheme.typography.headlineSmall)
-        Row { listOf("Cadastro","Mesas","Classificação").forEachIndexed { i,title -> TextButton(onClick={tab=i}) { Text(title) } } }
+    Scaffold(containerColor = MaterialTheme.colorScheme.background, contentWindowInsets = WindowInsets(0, 0, 0, 0), topBar = {
+        Column {
+            TournamentTopBar(s.name, stringResource(R.string.modality_cedh), onBack, onSettings)
+            TournamentTabs(listOf(stringResource(R.string.registration), stringResource(R.string.pods), stringResource(R.string.standings)), tab) { tab = it }
+        }
+    }) { padding ->
+    Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         error?.let { Text(it,color=MaterialTheme.colorScheme.error) }
         if(tab==0) {
             CedhField("Nome",s.name,!locked) { save(s.copy(name=it)) }
@@ -50,22 +58,22 @@ fun CedhApp(repository: CedhRepository) {
             number("Pontos por derrota",s.config.loss) { s.config.copy(loss=it) }()
             number("Tempo da final (min)",s.config.finalMinutes) { s.config.copy(finalMinutes=it) }()
             number("Adicional da final (min)",s.config.finalExtraMinutes) { s.config.copy(finalExtraMinutes=it) }()
-            Row { Checkbox(s.config.top4,{save(s.copy(config=s.config.copy(top4=it)))},enabled=!locked); Text("Final Top 4") }
-            Row { Checkbox(s.config.agreement,{save(s.copy(config=s.config.copy(agreement=it)))},enabled=!locked); Text("Permitir empate por acordo") }
+            Row { Checkbox(s.config.top4,{save(s.copy(config=s.config.copy(top4=it)))},enabled=!locked); Text(stringResource(R.string.top4)) }
+            Row { Checkbox(s.config.agreement,{save(s.copy(config=s.config.copy(agreement=it)))},enabled=!locked); Text(stringResource(R.string.agreement)) }
             Text("Desempates: pontos → vitórias → OMW% (adversários únicos).")
             s.players.forEach { p ->
-                Card { Column(Modifier.padding(12.dp)) {
+                Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     CedhField("Jogador",p.name,!locked) { v -> save(s.copy(players=s.players.map { if(it.id==p.id)it.copy(name=v) else it })) }
                     CedhField("Comandante(s)",p.commanders,!locked) { v -> save(s.copy(players=s.players.map { if(it.id==p.id)it.copy(commanders=v) else it })) }
                     CedhField("Deck",p.deck,!locked) { v -> save(s.copy(players=s.players.map { if(it.id==p.id)it.copy(deck=v) else it })) }
                     CedhField("Moxfield (opcional)",p.moxfield,!locked) { v -> save(s.copy(players=s.players.map { if(it.id==p.id)it.copy(moxfield=v) else it })) }
-                    TextButton(onClick={save(s.copy(players=s.players.filter { it.id!=p.id }))},enabled=!locked) { Text("Remover") }
+                    TextButton(onClick={save(s.copy(players=s.players.filter { it.id!=p.id }))},enabled=!locked, colors=destructiveTextColors()) { Text(stringResource(R.string.remove)) }
                 } }
             }
-            Button(onClick={save(s.copy(players=s.players+E.Player(UUID.randomUUID().toString(),"")))},enabled=!locked) { Text("Adicionar jogador (${s.players.size})") }
-            Button(onClick={fresh=true}) { Text("Novo campeonato cEDH") }
+            Button(onClick={save(s.copy(players=s.players+E.Player(UUID.randomUUID().toString(),"")))},enabled=!locked, colors = championshipButtonColors()) { Text("Adicionar jogador (${s.players.size})") }
+            Button(onClick={fresh=true}, colors = championshipButtonColors()) { Text(stringResource(R.string.new_cedh)) }
             var archives by remember { mutableStateOf<List<CedhState>>(emptyList()) }
-            TextButton(onClick={try{archives=repository.archives()}catch(e:Exception){error=e.message}}) { Text("Campeonatos arquivados") }
+            TextButton(onClick={try{archives=repository.archives()}catch(e:Exception){error=e.message}}) { Text(stringResource(R.string.archived)) }
             archives.forEach { old -> TextButton(onClick={try{repository.archive(s);save(old);archives=emptyList()}catch(e:Exception){error=e.message}}) { Text("Abrir: ${old.name} (${old.players.size} jogadores)") } }
         }
         if(tab==1) {
@@ -74,12 +82,12 @@ fun CedhApp(repository: CedhRepository) {
             Button(onClick={try {
                 require(s.players.all { it.deck.isNotBlank() && it.commanders.isNotBlank() }) { "Preencha deck e comandantes." }
                 preview=if(round<s.config.rounds) E.pair(s.players,s.tables,s.config) else listOf(E.finalTable(s.players,s.tables,s.config))
-            }catch(e:Exception){error=e.message}},enabled=(!locked || complete) && (round<s.config.rounds || (s.config.top4 && round==s.config.rounds))) { Text("Prévia da próxima rodada") }
+            }catch(e:Exception){error=e.message}},enabled=(!locked || complete) && (round<s.config.rounds || (s.config.top4 && round==s.config.rounds)), colors = championshipButtonColors()) { Text(stringResource(R.string.preview_next)) }
             preview?.let { tables ->
-                Text("Prévia — confirme para salvar")
+                Text(stringResource(R.string.preview_confirm))
                 tables.forEachIndexed { i,t -> Text("Mesa ${i+1}: "+t.seats.joinToString(" → ") { id -> s.players.first { it.id==id }.name }) }
-                Button(onClick={ val next=s.copy(tables=s.tables+tables); try { E.validate(next.players,next.tables,next.config); save(next); preview=null }catch(e:Exception){error=e.message} }) { Text("Confirmar sorteio") }
-                TextButton(onClick={preview=null}) { Text("Cancelar prévia") }
+                Button(onClick={ val next=s.copy(tables=s.tables+tables); try { E.validate(next.players,next.tables,next.config); save(next); preview=null }catch(e:Exception){error=e.message} }, colors = championshipButtonColors()) { Text(stringResource(R.string.confirm_pairings)) }
+                TextButton(onClick={preview=null}) { Text(stringResource(R.string.cancel_preview)) }
             }
             s.tables.groupBy { it.round }.toSortedMap(reverseOrder()).forEach { (r,tables) ->
                 var expanded by remember(r) { mutableStateOf(r==round) }
@@ -92,16 +100,16 @@ fun CedhApp(repository: CedhRepository) {
                     val remaining=minutes*60-elapsed
                     Text(if(remaining>0) "Tempo: ${remaining/60}:${(remaining%60).toString().padStart(2,'0')}" else "Tempo regulamentar encerrado. Jogador ativo conclui o turno. Adicional: ${(extra*60+remaining).coerceAtLeast(0)} s",color=if(remaining<=0)MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
                     if(remaining<=-extra*60) Text(if(tables.first().final) "Final: continue até haver um vencedor." else "Limite adicional encerrado. Sem vencedor, registre empate por tempo.")
-                    Row {
+                    FlowRow {
                         TextButton(onClick={save(s.copy(clocks=s.clocks+(r to if(clock.since==null)clock.start(System.currentTimeMillis()) else clock.pause(System.currentTimeMillis()))))}) { Text(if(clock.since==null) "Iniciar / retomar" else "Pausar") }
-                        TextButton(onClick={reset=r}) { Text("Reiniciar") }
+                        TextButton(onClick={reset=r}) { Text(stringResource(R.string.restart)) }
                     }
-                    tables.forEachIndexed { i,t -> Card { Column(Modifier.padding(12.dp)) {
+                    tables.forEachIndexed { i,t -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         Text("Mesa ${i+1}")
                         t.seats.forEachIndexed { seat,id -> val p=s.players.first { it.id==id }; Text("${seat+1}. ${p.name} · ${p.commanders} · ${p.deck}") }
                         Text(t.result?.let { it.winner?.let { id -> "Vitória: ${s.players.first { it.id==id }.name}" } ?: it.outcome.name } ?: "Pendente")
                         t.result?.let { Text("${it.durationSeconds}s · ${it.notes}") }
-                        Button(onClick={editing=s.tables.indexOf(t)}) { Text(if(t.result==null) "Registrar resultado" else "Corrigir resultado") }
+                        Button(onClick={editing=s.tables.indexOf(t)}, colors = championshipButtonColors()) { Text(if(t.result==null) "Registrar resultado" else "Corrigir resultado") }
                     } } }
                 }
             }
@@ -111,14 +119,15 @@ fun CedhApp(repository: CedhRepository) {
             val finished=locked && s.tables.all { it.result!=null } && (s.tables.any { it.final } || (!s.config.top4 && s.tables.maxOf { it.round }==s.config.rounds))
             val champion=if(s.config.top4)s.tables.firstOrNull { it.final }?.result?.winner else ranking.firstOrNull()?.id
             if(finished && champion!=null) Text("Campeão: ${s.players.first { it.id==champion }.name}",style=MaterialTheme.typography.headlineSmall)
-            if(s.config.top4)Text("Classificação classificatória (anterior à final)")
+            if(s.config.top4)Text(stringResource(R.string.qualifying_standings))
             ranking.forEachIndexed { i,row -> val p=s.players.first { it.id==row.id }
-                Text("${i+1}. ${p.name} · ${p.commanders} / ${p.deck}\n${row.points} pts · ${row.wins}V ${row.draws}E ${row.losses}D · ${row.games} jogos · ${"%.1f".format(row.winRate*100)}% V · OMW ${"%.1f".format(row.omw*100)}%")
+                Card(Modifier.fillMaxWidth()) { Box(Modifier.padding(16.dp)) { Text("${i+1}. ${p.name} · ${p.commanders} / ${p.deck}\n${row.points} pts · ${row.wins}V ${row.draws}E ${row.losses}D · ${row.games} jogos · ${"%.1f".format(row.winRate*100)}% V · OMW ${"%.1f".format(row.omw*100)}%") } }
             }
         }
     }
-    reset?.let { r -> AlertDialog(onDismissRequest={reset=null},title={Text("Reiniciar cronômetro?")},text={Text("O tempo transcorrido desta rodada será zerado.")},confirmButton={TextButton(onClick={save(s.copy(clocks=s.clocks+(r to CedhClock())));reset=null}){Text("Reiniciar")}},dismissButton={TextButton(onClick={reset=null}){Text("Cancelar")}}) }
-    if(fresh) AlertDialog(onDismissRequest={fresh=false},title={Text("Arquivar e criar campeonato?")},confirmButton={TextButton(onClick={try{repository.archive(s);save(CedhState());fresh=false}catch(e:Exception){error=e.message}}){Text("Criar")}},dismissButton={TextButton(onClick={fresh=false}){Text("Cancelar")}})
+    }
+    reset?.let { r -> AlertDialog(onDismissRequest={reset=null},title={Text(stringResource(R.string.reset_clock))},text={Text(stringResource(R.string.reset_clock_body))},confirmButton={TextButton(onClick={save(s.copy(clocks=s.clocks+(r to CedhClock())));reset=null}){Text(stringResource(R.string.restart))}},dismissButton={TextButton(onClick={reset=null}){Text(stringResource(R.string.cancel))}}) }
+    if(fresh) AlertDialog(onDismissRequest={fresh=false},title={Text(stringResource(R.string.archive_create))},confirmButton={TextButton(onClick={try{repository.archive(s);save(CedhState());fresh=false}catch(e:Exception){error=e.message}}){Text(stringResource(R.string.create))}},dismissButton={TextButton(onClick={fresh=false}){Text(stringResource(R.string.cancel))}})
     editing?.let { index -> CedhResultDialog(s.tables[index],s.players,s.config,onDismiss={editing=null}) { result ->
         val next=s.copy(tables=s.tables.mapIndexed { i,t -> if(i==index)t.copy(result=result) else t })
         try { E.validate(next.players,next.tables,next.config);save(next);editing=null }catch(e:Exception){error=e.message}
@@ -133,7 +142,7 @@ private fun CedhResultDialog(table: E.Table, players: List<E.Player>, config: E.
     var eliminated by remember { mutableStateOf(table.result?.eliminated ?: emptyMap()) }
     var penalties by remember { mutableStateOf(table.result?.penalties ?: emptyMap()) }
     var error by remember { mutableStateOf<String?>(null) }
-    AlertDialog(onDismissRequest=onDismiss,title={Text("Resultado da mesa")},text={Column(Modifier.verticalScroll(rememberScrollState())) {
+    AlertDialog(onDismissRequest=onDismiss,title={Text(stringResource(R.string.pod_result))},text={Column(Modifier.verticalScroll(rememberScrollState())) {
         table.seats.forEach { id ->
             val p=players.first { it.id==id }
             TextButton(onClick={winner=id;outcome=E.Outcome.WIN;eliminated=eliminated-id}){Text((if(winner==id)"✓ " else "")+"Vitória: ${p.name}")}
@@ -145,5 +154,5 @@ private fun CedhResultDialog(table: E.Table, players: List<E.Player>, config: E.
         CedhField("Duração (segundos)",duration){duration=it}
         CedhField("Observações",notes){notes=it}
         error?.let {Text(it)}
-    }},confirmButton={TextButton(onClick={val seconds=duration.toIntOrNull();if(seconds==null||seconds<0)error="Duração inválida" else if(table.final && winner==null)error="A final exige vencedor; continue a mesa conforme procedimento anunciado." else onSave(E.Result(outcome,winner,eliminated,seconds,notes,penalties))}){Text("Salvar")}},dismissButton={TextButton(onClick=onDismiss){Text("Cancelar")}})
+    }},confirmButton={TextButton(onClick={val seconds=duration.toIntOrNull();if(seconds==null||seconds<0)error="Duração inválida" else if(table.final && winner==null)error="A final exige vencedor; continue a mesa conforme procedimento anunciado." else onSave(E.Result(outcome,winner,eliminated,seconds,notes,penalties))}){Text(stringResource(R.string.save))}},dismissButton={TextButton(onClick=onDismiss){Text(stringResource(R.string.cancel))}})
 }

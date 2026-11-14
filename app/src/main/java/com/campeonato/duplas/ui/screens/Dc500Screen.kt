@@ -6,7 +6,14 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.toArgb
+import com.campeonato.duplas.R
+import com.campeonato.duplas.ui.components.TournamentTopBar
+import android.webkit.WebChromeClient
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -17,15 +24,30 @@ import androidx.compose.ui.viewinterop.AndroidView
 /** Local HTTPS origin keeps ES modules and DOM storage available completely offline. */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun Dc500App() {
+fun Dc500App(onBack: () -> Unit = {}, onSettings: () -> Unit = {}) {
     val context = LocalContext.current
+    val defaultTitle = stringResource(R.string.modality_dc500)
+    var title by remember { mutableStateOf(defaultTitle) }
+    val background = MaterialTheme.colorScheme.background.toArgb()
     val web = remember {
         WebView(context).apply {
+            setBackgroundColor(background)
+            webChromeClient = object : WebChromeClient() {
+                override fun onReceivedTitle(view: WebView?, value: String?) {
+                    title = value?.takeIf { it.isNotBlank() } ?: defaultTitle
+                }
+            }
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.allowFileAccess = false
             settings.allowContentAccess = false
             webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView, url: String) {
+                    // Native chrome owns the title; keep the web status and all tournament content.
+                    if (url.startsWith("https://appassets.androidplatform.net/dc500/")) {
+                        view.evaluateJavascript("document.querySelector('header h1')?.setAttribute('hidden','');", null)
+                    }
+                }
                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse {
                     val uri = request.url
                     if (uri.scheme != "https" || uri.host != "appassets.androidplatform.net")
@@ -55,5 +77,8 @@ fun Dc500App() {
         }
     }
     DisposableEffect(web) { onDispose { web.destroy() } }
-    AndroidView(factory = { web }, modifier = Modifier.fillMaxSize())
+    Column(Modifier.fillMaxSize()) {
+        TournamentTopBar(title, stringResource(R.string.modality_dc500), onBack, onSettings)
+        AndroidView(factory = { web }, modifier = Modifier.fillMaxWidth().weight(1f))
+    }
 }

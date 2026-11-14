@@ -1,5 +1,7 @@
 ﻿package com.campeonato.duplas.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.campeonato.duplas.R
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -50,12 +52,7 @@ import com.campeonato.duplas.ui.theme.AppWin
 
 @Composable
 fun SectionTitle(title: String, subtitle: String? = null) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(title, style = MaterialTheme.typography.titleLarge)
-        if (subtitle != null) {
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = AppMutedText)
-        }
-    }
+    SectionHeader(title, subtitle)
 }
 
 @Composable
@@ -112,18 +109,20 @@ fun TeamEditorCard(
             OutlinedTextField(
                 value = team.personA,
                 onValueChange = onPersonAChange,
-                label = { Text("Pessoa 1") },
+                label = { Text(stringResource(R.string.player_one)) },
                 leadingIcon = { Icon(Icons.Rounded.Person, contentDescription = null) },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                colors = championshipFieldColors()
             )
             OutlinedTextField(
                 value = team.personB,
                 onValueChange = onPersonBChange,
-                label = { Text("Pessoa 2") },
+                label = { Text(stringResource(R.string.player_two)) },
                 leadingIcon = { Icon(Icons.Rounded.Person, contentDescription = null) },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                colors = championshipFieldColors()
             )
             Text(
                 "Nome da dupla: $label",

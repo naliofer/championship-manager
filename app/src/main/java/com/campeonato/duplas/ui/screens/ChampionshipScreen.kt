@@ -9,6 +9,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.res.stringResource
+import com.campeonato.duplas.R
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.ui.Modifier
@@ -26,13 +28,13 @@ import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChampionshipApp(repository: ChampionshipRepository) {
+fun ChampionshipApp(repository: ChampionshipRepository, onBack: () -> Unit = {}, onSettings: () -> Unit = {}) {
     val loaded = remember { runCatching { repository.load() } }
     if (loaded.isFailure) {
         Surface(Modifier.fillMaxSize()) {
             Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Não foi possível abrir os dados", style = MaterialTheme.typography.titleLarge)
-                Text("Os dados locais foram preservados. Não será criado um campeonato por cima deles.")
+                Text(stringResource(R.string.cannot_open), style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.preserved))
                 Text(loaded.exceptionOrNull()?.message ?: "Erro de leitura")
             }
         }
@@ -57,12 +59,10 @@ fun ChampionshipApp(repository: ChampionshipRepository) {
     val finished = current == state.rounds && state.matches.isNotEmpty() && state.matches.all { it.result != -1 }
     val standings = Engine.standings(state.matches, state.teams.size)
     val tabs = listOf("Cadastro", "Duplas", "Confrontos", "Classificação", "Ranking Killer")
-    Scaffold(topBar = {
+    Scaffold(containerColor = MaterialTheme.colorScheme.background, contentWindowInsets = WindowInsets(0, 0, 0, 0), topBar = {
         Column {
-            CenterAlignedTopAppBar(title = { Text(state.name, maxLines = 1) })
-            ScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
-                tabs.forEachIndexed { index, title -> Tab(selected = tab == index, onClick = { tab = index }, text = { Text(title) }) }
-            }
+            TournamentTopBar(state.name, stringResource(R.string.modality_duplas), onBack, onSettings)
+            TournamentTabs(tabs, tab) { tab = it }
         }
     }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -89,16 +89,16 @@ fun ChampionshipApp(repository: ChampionshipRepository) {
                         if (!state.started) item {
                             OutlinedButton(onClick = {
                                 update { Engine.updatePlayers(it, it.players + Player(UUID.randomUUID().toString())) }
-                            }, enabled = state.players.size < 24) { Text("Adicionar participante") }
+                            }, enabled = state.players.size < 24, colors = championshipSecondaryColors()) { Text(stringResource(R.string.add_participant)) }
                             Button(onClick = {
                                 update { it.copy(teams = Engine.drawTeams(it.players), teamsConfirmed = false) }
                                 if (state.teams.isNotEmpty()) tab = 1
-                            }) { Text(if (state.teams.isEmpty()) "Sortear duplas" else "Refazer sorteio das duplas") }
+                            }, colors = championshipButtonColors()) { Text(if (state.teams.isEmpty()) "Sortear duplas" else "Refazer sorteio das duplas") }
                         }
                     }
                     item {
                         HorizontalDivider()
-                        OutlinedButton(onClick = { newChampionship = true }, enabled = state.created) { Text("Novo campeonato") }
+                        OutlinedButton(onClick = { newChampionship = true }, enabled = state.created, colors = championshipSecondaryColors()) { Text(stringResource(R.string.new_tournament)) }
                     }
                 }
                 1 -> {
@@ -114,18 +114,18 @@ fun ChampionshipApp(repository: ChampionshipRepository) {
                         }
                     }
                     if (!state.started && state.teams.isNotEmpty()) item {
-                        OutlinedButton(onClick = { update { it.copy(teams = Engine.drawTeams(it.players), teamsConfirmed = false) } }) { Text("Refazer sorteio") }
+                        OutlinedButton(onClick = { update { it.copy(teams = Engine.drawTeams(it.players), teamsConfirmed = false) } }, colors = championshipSecondaryColors()) { Text(stringResource(R.string.draw_again)) }
                         Button(onClick = {
                             update { require(Engine.validTeams(it)) { "Duplas inválidas. Confira nomes, decks e participantes." }; it.copy(teamsConfirmed = true) }
-                        }, enabled = !state.teamsConfirmed) { Text(if (state.teamsConfirmed) "Duplas confirmadas" else "Confirmar duplas") }
-                        Button(onClick = { update(Engine::start); if (state.started) tab = 2 }, enabled = state.teamsConfirmed) { Text("Iniciar campeonato") }
+                        }, enabled = !state.teamsConfirmed, colors = championshipButtonColors()) { Text(if (state.teamsConfirmed) "Duplas confirmadas" else "Confirmar duplas") }
+                        Button(onClick = { update(Engine::start); if (state.started) tab = 2 }, enabled = state.teamsConfirmed, colors = championshipButtonColors()) { Text(stringResource(R.string.start_tournament)) }
                     }
                 }
                 2 -> {
                     item {
                         SectionTitle("Confrontos", "$current de ${state.rounds} rodadas • adversários sem repetição")
                         Text("Vitória: 2×0, 0×2, 2×1 ou 1×2. Demais placares são empate, inclusive 2×2.")
-                        Button(onClick = { update(Engine::nextRound) }, enabled = state.started && current < state.rounds && state.matches.all { it.result != -1 }) {
+                        Button(onClick = { update(Engine::nextRound) }, enabled = state.started && current < state.rounds && state.matches.all { it.result != -1 }, colors = championshipButtonColors()) {
                             Text(if (current == 0) "Sortear 1ª rodada" else "Sortear próxima rodada")
                         }
                         if (!state.started) Text("Confirme as duplas e inicie o campeonato na aba Duplas.")
@@ -171,22 +171,22 @@ fun ChampionshipApp(repository: ChampionshipRepository) {
             }
         }
     }
-    if (error != null) AlertDialog(onDismissRequest = { error = null }, title = { Text("Confira os dados") }, text = { Text(error!!) }, confirmButton = { TextButton(onClick = { error = null }) { Text("Entendi") } })
-    requestEdit?.let { index -> AlertDialog(onDismissRequest = { requestEdit = null }, title = { Text("Corrigir resultado?") },
+    if (error != null) AlertDialog(onDismissRequest = { error = null }, title = { Text(stringResource(R.string.check_data)) }, text = { Text(error!!) }, confirmButton = { TextButton(onClick = { error = null }) { Text(stringResource(R.string.understood)) } })
+    requestEdit?.let { index -> AlertDialog(onDismissRequest = { requestEdit = null }, title = { Text(stringResource(R.string.correct_result_question)) },
         text = { Text("Ao confirmar a correção, a classificação e o Ranking Killer serão recalculados. Os próximos confrontos já sorteados serão mantidos.") },
-        confirmButton = { TextButton(onClick = { editMatch = index; requestEdit = null }) { Text("Corrigir") } },
-        dismissButton = { TextButton(onClick = { requestEdit = null }) { Text("Cancelar") } }) }
+        confirmButton = { TextButton(onClick = { editMatch = index; requestEdit = null }) { Text(stringResource(R.string.correct)) } },
+        dismissButton = { TextButton(onClick = { requestEdit = null }) { Text(stringResource(R.string.cancel)) } }) }
     editMatch?.let { index -> MatchEditor(state, index, onDismiss = { editMatch = null }, onConfirm = { events ->
         val before = state
         update { Engine.confirmMatch(it, index, events) }
         if (state != before || error == null) editMatch = null
     }) }
-    if (newChampionship) AlertDialog(onDismissRequest = { newChampionship = false }, title = { Text("Criar outro campeonato?") },
+    if (newChampionship) AlertDialog(onDismissRequest = { newChampionship = false }, title = { Text(stringResource(R.string.another_tournament)) },
         text = { Text("O campeonato atual será substituído. Uma cópia dos dados atuais será mantida no armazenamento local; a consulta ao histórico ainda não está disponível.") },
         confirmButton = { TextButton(onClick = {
             try { repository.backupCurrent(state); update { Championship() }; tab = 0; newChampionship = false }
             catch (e: Exception) { error = e.message; newChampionship = false }
-        }) { Text("Criar novo") } }, dismissButton = { TextButton(onClick = { newChampionship = false }) { Text("Cancelar") } })
+        }) { Text(stringResource(R.string.create_new)) } }, dismissButton = { TextButton(onClick = { newChampionship = false }) { Text(stringResource(R.string.cancel)) } })
 }
 
 @Composable
@@ -195,15 +195,15 @@ private fun ChampionshipSettings(state: Championship, name: String, rounds: Stri
     val max = Engine.maxRounds(state.players.size / 2)
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(name, onNameChange, label = { Text("Nome do campeonato") }, enabled = !state.started, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(rounds, { onRoundsChange(it.filter(Char::isDigit).take(2)) }, label = { Text("Rodadas (1 a $max)") }, enabled = !state.started, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(name, onNameChange, label = { Text(stringResource(R.string.tournament_name)) }, enabled = !state.started, singleLine = true, modifier = Modifier.fillMaxWidth(), colors = championshipFieldColors())
+            OutlinedTextField(rounds, { onRoundsChange(it.filter(Char::isDigit).take(2)) }, label = { Text("Rodadas (1 a $max)") }, enabled = !state.started, singleLine = true, modifier = Modifier.fillMaxWidth(), colors = championshipFieldColors())
             if (state.started) Text("Rodadas bloqueadas após o início: ${state.rounds}.")
             else Button(onClick = {
                 val count = rounds.toIntOrNull()
                 if (name.isBlank()) error = "Informe o nome do campeonato."
                 else if (count == null || count !in 1..max) error = "Escolha de 1 a $max rodadas para a quantidade atual de participantes."
                 else { error = null; onSave(name.trim(), count) }
-            }) { Text(if (state.created) "Salvar configuração" else "Criar campeonato") }
+            }, colors = championshipButtonColors()) { Text(if (state.created) "Salvar configuração" else "Criar campeonato") }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
     }
@@ -213,9 +213,9 @@ private fun ChampionshipSettings(state: Championship, name: String, rounds: Stri
 private fun PlayerEditor(player: Player, enabled: Boolean, onChange: (Player) -> Unit, onRemove: () -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(player.name, { onChange(player.copy(name = it)) }, label = { Text("Nome do participante") }, enabled = enabled, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(player.deck, { onChange(player.copy(deck = it)) }, label = { Text("Deck (obrigatório)") }, enabled = enabled, singleLine = true, modifier = Modifier.fillMaxWidth())
-            if (enabled) TextButton(onClick = onRemove) { Text("Remover participante") }
+            OutlinedTextField(player.name, { onChange(player.copy(name = it)) }, label = { Text(stringResource(R.string.participant_name)) }, enabled = enabled, singleLine = true, modifier = Modifier.fillMaxWidth(), colors = championshipFieldColors())
+            OutlinedTextField(player.deck, { onChange(player.copy(deck = it)) }, label = { Text(stringResource(R.string.required_deck)) }, enabled = enabled, singleLine = true, modifier = Modifier.fillMaxWidth(), colors = championshipFieldColors())
+            if (enabled) TextButton(onClick = onRemove, colors = destructiveTextColors()) { Text(stringResource(R.string.remove_participant)) }
         }
     }
 }
@@ -241,7 +241,7 @@ private fun RoundAccordion(round: Int, games: List<Match>, state: Championship, 
                         if (official in 0..1) Text("Derrota: ${if (official == 0) b else a}", color = AppLoss)
                         game.eliminations.forEach { event -> Text("${state.players.first { it.id == event.killerId }.name} eliminou ${state.players.first { it.id == event.victimId }.name}") }
                         if (game.legacyScore) Text("Placar antigo: autoria das eliminações não informada.")
-                        OutlinedButton(onClick = { onEdit(game) }) { Text(if (game.result == -1) "Registrar eliminações e resultado" else "Corrigir resultado") }
+                        OutlinedButton(onClick = { onEdit(game) }, colors = championshipSecondaryColors()) { Text(if (game.result == -1) "Registrar eliminações e resultado" else "Corrigir resultado") }
                     }
                 }
             }
@@ -278,7 +278,7 @@ private fun MatchEditor(state: Championship, index: Int, onDismiss: () -> Unit, 
                     Text("Deck: ${victim.deck.ifBlank { "Não informado" }}")
                     Row(Modifier.fillMaxWidth().clickable { events = events.filterNot { it.victimId == victim.id } }) {
                         RadioButton(selected == null, onClick = { events = events.filterNot { it.victimId == victim.id } })
-                        Text("Não foi eliminado", Modifier.padding(top = 12.dp))
+                        Text(stringResource(R.string.not_eliminated), Modifier.padding(top = 12.dp))
                     }
                     opponentTeam.playerIds.forEach { id ->
                         val killer = state.players.first { it.id == id }
@@ -291,8 +291,8 @@ private fun MatchEditor(state: Championship, index: Int, onDismiss: () -> Unit, 
                 }
             }
         }
-    }, confirmButton = { TextButton(onClick = { onConfirm(events) }) { Text(if (match.result == -1) "Confirmar resultado" else "Confirmar correção") } }, dismissButton = { TextButton(onClick = { close() }) { Text("Cancelar") } })
-    if (discard) AlertDialog(onDismissRequest = { discard = false }, title = { Text("Descartar alterações?") }, text = { Text("Os registros ainda não confirmados serão descartados.") }, confirmButton = { TextButton(onClick = onDismiss) { Text("Descartar") } }, dismissButton = { TextButton(onClick = { discard = false }) { Text("Continuar editando") } })
+    }, confirmButton = { TextButton(onClick = { onConfirm(events) }) { Text(if (match.result == -1) "Confirmar resultado" else "Confirmar correção") } }, dismissButton = { TextButton(onClick = { close() }) { Text(stringResource(R.string.cancel)) } })
+    if (discard) AlertDialog(onDismissRequest = { discard = false }, title = { Text(stringResource(R.string.discard_question)) }, text = { Text(stringResource(R.string.unconfirmed_discard)) }, confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.discard)) } }, dismissButton = { TextButton(onClick = { discard = false }) { Text(stringResource(R.string.keep_editing)) } })
 }
 
 @Composable
@@ -308,6 +308,6 @@ private fun SharePodium(state: Championship, standings: List<Standing>) {
         }
         try { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text) }, "Compartilhar resultado")) }
         catch (_: ActivityNotFoundException) { error = true }
-    }, modifier = Modifier.fillMaxWidth()) { Text("Compartilhar melhores colocados") }
-    if (error) Text("Nenhum aplicativo disponível para compartilhar.", color = MaterialTheme.colorScheme.error)
+    }, modifier = Modifier.fillMaxWidth(), colors = championshipButtonColors()) { Text(stringResource(R.string.share_top)) }
+    if (error) Text(stringResource(R.string.share_unavailable), color = MaterialTheme.colorScheme.error)
 }
