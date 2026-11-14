@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import com.campeonato.duplas.data.*
 import android.content.SharedPreferences
 import androidx.compose.foundation.Image
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.campeonato.duplas.R
@@ -20,7 +21,7 @@ fun ModalityApp(prefs: SharedPreferences) {
             "duplas" -> ChampionshipApp(remember { ChampionshipRepository(prefs) })
             else -> {
                 Image(painterResource(R.drawable.championship_logo),contentDescription="Logo Championship Manager",modifier=Modifier.size(112.dp))
-                Text("Championship Manager",style=MaterialTheme.typography.headlineSmall)
+                Text(stringResource(R.string.app_name),style=MaterialTheme.typography.headlineSmall)
                 Text("Criar ou continuar campeonato")
                 listOf("duplas" to "Campeonato de Duplas","cedh" to "cEDH Multiplayer (4 jogadores)","dc500" to "Duel Commander 500 (1?1)").forEach { (key,label) ->
                     Button(onClick={prefs.edit().putString("active_modality",key).apply();mode=key}){Text(label)}
