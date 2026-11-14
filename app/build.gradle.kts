@@ -37,3 +37,14 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.runtime:runtime")
 }
+
+// Bundle the same offline DC500 modules used by the PWA; no remote runtime.
+val dc500Assets = tasks.register<Copy>("prepareDc500Assets") {
+    from(rootProject.file("web")) {
+        include("dc500.html", "style.css", "dc500-*.js", "icon.png")
+        exclude("*.test.js")
+    }
+    into(layout.buildDirectory.dir("generated/dc500Assets/dc500"))
+}
+android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/dc500Assets"))
+tasks.named("preBuild").configure { dependsOn(dc500Assets) }
